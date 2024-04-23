@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-
+import numpy as np
+import global_var
 
 # Positional encoding embedding. Code was taken from https://github.com/bmild/nerf.
 class Embedder:
@@ -33,7 +34,23 @@ class Embedder:
         self.out_dim = out_dim
 
     def embed(self, inputs):
-        return torch.cat([fn(inputs) for fn in self.embed_fns], -1)
+        input_enc=torch.cat([fn(inputs) for fn in self.embed_fns], -1)
+        
+        #规定在训练过程中前40%的进度，逐渐提升频率编码的频率等级
+        start=0
+        end=0.4
+        progress=global_var.progress.data
+        
+        alpha = (progress-start)/(end-start)*self.kwargs['num_freqs']
+        k = torch.arange(self.kwargs['num_freqs'],dtype=torch.float32,device=inputs.device)
+        weight = (1-(alpha-k).clamp_(min=0,max=1).mul_(np.pi).cos_())/2
+        weight = torch.cat([torch.tensor([1.0]*3), *[w.repeat(6) for w in weight]], dim=0).to(inputs.device)
+              
+        # apply weights
+        shape = input_enc.shape
+        input_enc = (input_enc*weight).view(*shape)
+        
+        return input_enc
 
 
 def get_embedder(multires, input_dims=3):
@@ -43,7 +60,7 @@ def get_embedder(multires, input_dims=3):
         'max_freq_log2': multires-1,
         'num_freqs': multires,
         'log_sampling': True,
-        'periodic_fns': [torch.sin, torch.cos],
+        'periodic_fns': [torch.sin, torch.cos]
     }
 
     embedder_obj = Embedder(**embed_kwargs)
