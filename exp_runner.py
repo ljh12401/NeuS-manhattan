@@ -17,6 +17,7 @@ from models.dataset import Dataset
 from models.fields import RenderingNetwork, SDFNetwork, SingleVarianceNetwork, NeRF, SemanticNetwork
 from models.renderer import NeuSRenderer
 from models.data_utils import to_cuda
+import global_var
 import wandb
 
 
@@ -91,6 +92,8 @@ class Runner:
         params_to_train += list(self.semantic_network.parameters())
         params_to_train.append(self.theta)
         #################################################
+
+        global_var.progress = nn.Parameter(torch.Tensor([0.]), requires_grad=False)
 
         self.optimizer = torch.optim.Adam(params_to_train, lr=self.learning_rate)
 
@@ -267,6 +270,9 @@ class Runner:
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+            
+            #记录训练进度,用于控制频率编码的比例
+            global_var.progress.data=torch.tensor((self.iter_step / self.end_iter))
 
             self.iter_step += 1
 
@@ -598,8 +604,9 @@ if __name__ == '__main__':
     if args.mode == 'train':
         runner.train()
     elif args.mode == 'validate_mesh':
-        runner.validate_mesh(world_space=True, resolution=512, threshold=args.mcube_threshold)
-        runner.validate_semantic(resolution_level=1)
+        #runner.validate_mesh(world_space=True, resolution=512, threshold=args.mcube_threshold)
+        #runner.validate_semantic(resolution_level=1)
+        runner.validate_image(idx=7, resolution_level=2)
     elif args.mode.startswith('interpolate'):  # Interpolate views given two image indices
         _, img_idx_0, img_idx_1 = args.mode.split('_')
         img_idx_0 = int(img_idx_0)
